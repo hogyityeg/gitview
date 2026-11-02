@@ -104,6 +104,12 @@ const FOLDER = `<svg viewBox="0 0 16 16" width="11" height="11" aria-hidden="tru
 // worktreeIcon marks a branch or commit checked out in a linked worktree.
 const worktreeIcon = (wt) => `<span class="wt" title="checked out in worktree ${esc(wt.path)}">${FOLDER}</span>`;
 
+// behindMark warns about a branch that needs a rebase onto the default branch.
+function behindMark(branch, g) {
+  const n = g.behind[branch];
+  return n ? `<span class="behind" title="${n} commits behind ${esc(g.base)}, needs a rebase">⚠︎ ${n} behind</span>` : "";
+}
+
 function badges(c, g) {
   // Worktrees with a detached HEAD have no branch badge to carry the icon.
   let html = g.worktrees.filter((wt) => !wt.branch && wt.head === c.h)
@@ -148,9 +154,9 @@ function badges(c, g) {
     const wt = g.worktrees.find((w) => w.branch === l);
     html += `<span class="${cls}"${sync ? ` title="in sync with ${esc(sync.join(", "))}"` : ""}>`
       + (wt ? worktreeIcon(wt) : "") + esc(l)
-      + (sync ? `<span class="sync">⇅</span>` : "") + `</span>`;
+      + (sync ? `<span class="sync">⇅</span>` : "") + behindMark(l, g) + `</span>`;
   }
-  for (const r of remoteOnly) html += `<span class="ref remote">${esc(r)}</span>`;
+  for (const r of remoteOnly) html += `<span class="ref remote">${esc(r)}${behindMark(r, g)}</span>`;
   for (const t of tags) html += `<span class="ref tag">${esc(t)}</span>`;
   return html;
 }

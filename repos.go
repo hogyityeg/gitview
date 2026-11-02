@@ -63,7 +63,15 @@ type graph struct {
 	Remotes   []string   `json:"remotes"`
 	Worktrees []worktree `json:"worktrees"`
 	Commits   []commit   `json:"commits"`
+	// Base is the branch others are compared to, and Behind the branches that
+	// fell too far behind it, by name as they appear in commit refs.
+	Base   string         `json:"base"`
+	Behind map[string]int `json:"behind"`
 }
+
+// maxBehind is how many commits a branch may trail the default branch before
+// it gets a warning.
+const maxBehind = 5
 
 // worktree is a linked worktree; the main one is the repo itself.
 type worktree struct {
@@ -92,11 +100,18 @@ func readGraph(ctx context.Context, dir string, limit int) (*graph, error) {
 	if err != nil {
 		// A fresh repo without commits has nothing to show.
 		if _, herr := git(ctx, dir, "rev-parse", "--verify", "-q", "HEAD"); herr != nil {
-			return &graph{Remotes: []string{}, Worktrees: []worktree{}, Commits: []commit{}}, nil
+			return &graph{Remotes: []string{}, Worktrees: []worktree{}, Commits: []commit{}, Behind: map[string]int{}}, nil
 		}
 		return nil, err
 	}
-	g := &graph{Remotes: []string{}, Worktrees: []worktree{}, Commits: parseLog(out)}
+	g := &graph{Remotes: []string{}, Worktrees: []worktree{}, Commits: parseLog(out), Behind: map[string]int{}}
+	if base := defaultBranch(ctx, dir); base != "" {
+		g.Base = strings.TrimPrefix(strings.TrimPrefix(base, "refs/remotes/"), "refs/heads/")
+		// Needs git 2.41; without it there are just no warnings.
+		if refs, err := git(ctx, dir, "for-each-ref", "--format=%(refname) %(ahead-behind:"+base+")", "refs/heads", "refs/remotes"); err == nil {
+			g.Behind = parseBehind(refs)
+		}
+	}
 	if remotes, err := git(ctx, dir, "remote"); err == nil {
 		g.Remotes = append(g.Remotes, strings.Fields(string(remotes))...)
 	}
@@ -139,6 +154,41 @@ func parseLog(out []byte) []commit {
 		commits = append(commits, c)
 	}
 	return commits
+}
+
+// defaultBranch finds the full ref of the branch to compare others to. The
+// remote's goes first: it's what a rebase should target, and local main is
+// often stale when the work happens in worktrees.
+func defaultBranch(ctx context.Context, dir string) string {
+	candidates := []string{"refs/remotes/origin/main", "refs/remotes/origin/master", "refs/heads/main", "refs/heads/master"}
+	if out, err := git(ctx, dir, "symbolic-ref", "-q", "refs/remotes/origin/HEAD"); err == nil {
+		candidates = append([]string{strings.TrimSpace(string(out))}, candidates...)
+	}
+	for _, ref := range candidates {
+		if _, err := git(ctx, dir, "rev-parse", "--verify", "-q", ref); err == nil {
+			return ref
+		}
+	}
+	return ""
+}
+
+// parseBehind reads for-each-ref lines of "<ref> <ahead> <behind>". A branch
+// with nothing of its own (ahead 0) is left out: it's merged or not started,
+// so there's nothing to rebase.
+func parseBehind(out []byte) map[string]int {
+	behind := map[string]int{}
+	for _, line := range strings.Split(strings.TrimSpace(string(out)), "\n") {
+		f := strings.Fields(line)
+		if len(f) != 3 {
+			continue
+		}
+		ahead, _ := strconv.Atoi(f[1])
+		n, _ := strconv.Atoi(f[2])
+		if ahead > 0 && n > maxBehind {
+			behind[strings.TrimPrefix(strings.TrimPrefix(f[0], "refs/remotes/"), "refs/heads/")] = n
+		}
+	}
+	return behind
 }
 
 // parseWorktrees reads `git worktree list --porcelain`, skipping the main

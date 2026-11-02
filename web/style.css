@@ -163,6 +163,7 @@ header .status.error { color: #cf222e; }
 .ref.tag { color: #7d4e00; border-color: #d4a72c; background: #fff8c5; }
 .ref.head { color: #cf222e; border-color: #ff8182; background: #ffebe9; }
 .ref .sync { margin-left: 3px; }
+.ref .behind { margin: 0 -5px 0 5px; padding: 0 6px; border-radius: 8px; background: #cf222e; color: #ffffff; font-weight: 600; }
 .ref .wt { display: inline-flex; vertical-align: -1px; margin-right: 4px; }
 .ref.worktree { color: var(--muted); border-color: var(--line); background: #f6f8fa; }
 

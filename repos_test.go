@@ -2,10 +2,12 @@ package main
 
 import (
 	"context"
+	"maps"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"slices"
+	"strconv"
 	"strings"
 	"testing"
 )
@@ -28,9 +30,9 @@ func TestParseLog(t *testing.T) {
 	}
 }
 
-func TestReadGraphHidesT3Refs(t *testing.T) {
-	dir := t.TempDir()
-	run := func(args ...string) string {
+// gitIn returns a function that runs git in dir.
+func gitIn(t *testing.T, dir string) func(args ...string) string {
+	return func(args ...string) string {
 		t.Helper()
 		cmd := exec.Command("git", args...)
 		cmd.Dir = dir
@@ -43,6 +45,74 @@ func TestReadGraphHidesT3Refs(t *testing.T) {
 		}
 		return strings.TrimSpace(string(out))
 	}
+}
+
+func TestReadGraphFlagsBranchesFarBehindMain(t *testing.T) {
+	dir := t.TempDir()
+	run := gitIn(t, dir)
+	made := 0
+	commit := func(n int) {
+		t.Helper()
+		for range n {
+			made++ // same-second commits on a shared parent must still differ
+			run("commit", "-q", "--allow-empty", "-m", "c"+strconv.Itoa(made))
+		}
+	}
+	branchHere := func(name string) {
+		t.Helper()
+		run("switch", "-q", "-c", name)
+		commit(1)
+		run("switch", "-q", "main")
+	}
+	run("init", "-q", "-b", "main")
+	commit(1)
+	run("branch", "merged") // nothing of its own: no warning however old
+	branchHere("stale")
+	branchHere("feat/old-push")
+	run("update-ref", "refs/remotes/origin/feat/old-push", "feat/old-push")
+	commit(1)
+	branchHere("borderline") // exactly 5 behind is still fine
+	commit(5)
+
+	g, err := readGraph(context.Background(), dir, 100)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := map[string]int{"stale": 6, "feat/old-push": 6, "origin/feat/old-push": 6}
+	if g.Base != "main" || !maps.Equal(g.Behind, want) {
+		t.Errorf("base = %q, behind = %v, want main, %v", g.Base, g.Behind, want)
+	}
+
+	// The remote's default branch wins over the local one.
+	commit(2)
+	run("update-ref", "refs/remotes/origin/main", "main~2")
+	if g, err = readGraph(context.Background(), dir, 100); err != nil {
+		t.Fatal(err)
+	}
+	if g.Base != "origin/main" || !maps.Equal(g.Behind, want) {
+		t.Errorf("base = %q, behind = %v, want origin/main, %v", g.Base, g.Behind, want)
+	}
+}
+
+func TestDefaultBranchFollowsOriginHead(t *testing.T) {
+	dir := t.TempDir()
+	run := gitIn(t, dir)
+	run("init", "-q", "-b", "main")
+	run("commit", "-q", "--allow-empty", "-m", "c")
+	if got := defaultBranch(context.Background(), dir); got != "refs/heads/main" {
+		t.Errorf("no remote: got %q", got)
+	}
+	run("update-ref", "refs/remotes/origin/develop", "HEAD")
+	run("update-ref", "refs/remotes/origin/main", "HEAD")
+	run("symbolic-ref", "refs/remotes/origin/HEAD", "refs/remotes/origin/develop")
+	if got := defaultBranch(context.Background(), dir); got != "refs/remotes/origin/develop" {
+		t.Errorf("with origin/HEAD: got %q", got)
+	}
+}
+
+func TestReadGraphHidesT3Refs(t *testing.T) {
+	dir := t.TempDir()
+	run := gitIn(t, dir)
 	run("init", "-q", "-b", "main")
 	run("commit", "-q", "--allow-empty", "-m", "real")
 	head := run("rev-parse", "HEAD")

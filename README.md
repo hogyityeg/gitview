@@ -11,6 +11,9 @@ remote machine or across a polyrepo setup.
 - Several repositories at once, in a grid you can toggle per repo
 - Updates on its own, and pauses while the tab is hidden
 - Marks the checked-out branch and branches checked out in linked worktrees
+- Warns about branches with their own commits that are more than 5 commits
+  behind the default branch (`origin/HEAD`, else `main` or `master`; needs git
+  2.41+)
 - Click a commit's short hash to copy the full hash
 - One static binary with the web page embedded; it only reads from git
 
