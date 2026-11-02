@@ -4,6 +4,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"log"
 	"net/http"
 	"os"
@@ -26,6 +27,7 @@ func (s *server) routes() http.Handler {
 	mux.HandleFunc("GET /api/repos", s.handleRepos)
 	mux.HandleFunc("POST /api/repos/toggle", s.handleToggle)
 	mux.HandleFunc("GET /api/graph", s.handleGraph)
+	mux.HandleFunc("GET /api/diff", s.handleDiff)
 	mux.Handle("GET /", noCache(s.static))
 	return mux
 }
@@ -93,6 +95,29 @@ func (s *server) handleGraph(w http.ResponseWriter, r *http.Request) {
 	}
 	w.Header().Set("Content-Type", "application/json")
 	w.Write(body)
+}
+
+func (s *server) handleDiff(w http.ResponseWriter, r *http.Request) {
+	dir, ok := s.repoDir(r.URL.Query().Get("repo"))
+	if !ok {
+		http.Error(w, "unknown repo", http.StatusNotFound)
+		return
+	}
+	hash := r.URL.Query().Get("hash")
+	if !commitHash.MatchString(hash) {
+		http.Error(w, "invalid commit hash", http.StatusBadRequest)
+		return
+	}
+	d, err := readCommitDiff(r.Context(), dir, hash)
+	if errors.Is(err, errUnknownCommit) {
+		http.Error(w, err.Error(), http.StatusNotFound)
+		return
+	}
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	writeJSON(w, d)
 }
 
 // repoDir resolves a repo path from the client to a repository inside root.

@@ -101,6 +101,8 @@ function renderSvg(commits, lay, headHash) {
 
 const FOLDER = `<svg viewBox="0 0 16 16" width="11" height="11" aria-hidden="true"><path fill="currentColor" d="M1.75 1A1.75 1.75 0 0 0 0 2.75v10.5C0 14.216.784 15 1.75 15h12.5A1.75 1.75 0 0 0 16 13.25v-8.5A1.75 1.75 0 0 0 14.25 3H7.5a.25.25 0 0 1-.2-.1l-.9-1.2C6.07 1.26 5.55 1 5 1H1.75Z"/></svg>`;
 
+const LINK = `<svg viewBox="0 0 16 16" width="12" height="12" aria-hidden="true"><path fill="currentColor" d="m7.775 3.275 1.25-1.25a3.5 3.5 0 1 1 4.95 4.95l-2.5 2.5a3.5 3.5 0 0 1-4.95 0 .751.751 0 0 1 .018-1.042.751.751 0 0 1 1.042-.018 1.998 1.998 0 0 0 2.83 0l2.5-2.5a2.002 2.002 0 0 0-2.83-2.83l-1.25 1.25a.751.751 0 0 1-1.042-.018.751.751 0 0 1-.018-1.042Zm-4.69 9.64a1.998 1.998 0 0 0 2.83 0l1.25-1.25a.751.751 0 0 1 1.042.018.751.751 0 0 1 .018 1.042l-1.25 1.25a3.5 3.5 0 1 1-4.95-4.95l2.5-2.5a3.5 3.5 0 0 1 4.95 0 .751.751 0 0 1-.018 1.042.751.751 0 0 1-1.042.018 1.998 1.998 0 0 0-2.83 0l-2.5 2.5a1.998 1.998 0 0 0 0 2.83Z"/></svg>`;
+
 // worktreeIcon marks a branch or commit checked out in a linked worktree.
 const worktreeIcon = (wt) => `<span class="wt" title="checked out in worktree ${esc(wt.path)}">${FOLDER}</span>`;
 
@@ -173,6 +175,7 @@ function renderGraph(g) {
     rows += `<div class="row${c.p.length > 1 ? " merge" : ""}" style="padding-left:${indent}px">`
       + badges(c, g)
       + `<span class="subject" title="${esc(c.s)}">${esc(c.s)}</span>`
+      + `<button type="button" class="diff-link" data-hash="${c.h}" title="Show diff" aria-label="Show diff">${LINK}</button>`
       + `<span class="meta" title="${esc(new Date(c.t * 1000).toLocaleString())}">${esc(c.a)} · ${age(now - c.t)}</span>`
       + `<button type="button" class="copy" data-hash="${c.h}" title="Copy full hash">${c.h.slice(0, 7)}</button></div>`;
   });
@@ -223,6 +226,7 @@ function layoutGrid() {
     if (!p) {
       const el = document.createElement("section");
       el.className = "panel";
+      el.dataset.repo = path;
       el.innerHTML = `<div class="panel-head">${repoLabel(path)}<span class="head"></span><span class="error"></span></div><div class="panel-body"></div>`;
       p = { el, etag: "" };
       panels.set(path, p);
@@ -284,7 +288,93 @@ function repoLabel(path, topLevel = "") {
   return (parent ? `<span class="parent">${esc(parent)}</span>` : "") + `<span class="name">${esc(repoName(path))}</span>`;
 }
 
+const diffDialog = $("#diff");
+const diffTitle = $("#diff-title");
+const diffMeta = $("#diff-meta");
+const diffBody = $("#diff-body");
+let diffLoad = null; // AbortController of the diff being fetched
+
+async function openDiff(repo, hash) {
+  diffLoad = new AbortController();
+  const { signal } = diffLoad;
+  diffTitle.textContent = "Loading…";
+  diffTitle.title = "";
+  diffMeta.textContent = "";
+  diffBody.innerHTML = "";
+  diffDialog.showModal();
+  try {
+    const res = await fetch(`api/diff?repo=${encodeURIComponent(repo)}&hash=${hash}`, { signal });
+    if (!res.ok) throw new Error((await res.text()).trim() || res.statusText);
+    renderDiff(repo, await res.json());
+  } catch (e) {
+    if (signal.aborted) return;
+    diffTitle.textContent = "Could not load the diff";
+    diffBody.innerHTML = `<div class="diff-note">${esc(e.message)}</div>`;
+  }
+}
+
+function renderDiff(repo, d) {
+  const count = (key) => d.files.reduce((sum, f) => sum + f[key], 0);
+  diffTitle.textContent = d.subject;
+  diffTitle.title = d.subject;
+  diffMeta.innerHTML = [
+    esc(repoName(repo)),
+    `<code>${d.hash.slice(0, 7)}</code>`,
+    esc(d.author),
+    esc(new Date(d.time * 1000).toLocaleString()),
+    `${d.files.length} ${d.files.length === 1 ? "file" : "files"} ${countMarks(count("added"), count("deleted"))}`,
+    ...(d.merge ? ["merge, compared to its first parent"] : []),
+  ].join(" · ");
+  diffBody.innerHTML = (d.body ? `<pre class="diff-message">${esc(d.body)}</pre>` : "")
+    + (d.files.length ? d.files.map(renderFile).join("") : `<div class="diff-note">This commit changes no files.</div>`)
+    + (d.truncated ? `<div class="diff-note">This diff is too large, so only the start of it is shown.</div>` : "");
+}
+
+const countMarks = (added, deleted) => `<span class="diff-add">+${added}</span> <span class="diff-del">−${deleted}</span>`;
+
+function renderFile(f) {
+  const name = f.oldPath ? `${f.oldPath} → ${f.path}` : f.path;
+  const empty = f.binary ? "Binary file."
+    : f.status === "added" || f.status === "deleted" ? "Empty file."
+    : "No content changes.";
+  return `<section class="diff-file">`
+    + `<div class="diff-file-head"><span class="diff-status ${f.status}">${f.status}</span>`
+    + `<span class="diff-path" title="${esc(name)}">${esc(name)}</span>${f.lines.length ? countMarks(f.added, f.deleted) : ""}</div>`
+    + (f.lines.length ? renderLines(f.lines) : `<div class="diff-note">${empty}</div>`)
+    + `</section>`;
+}
+
+const MARKERS = { add: "+", del: "−", ctx: "" };
+
+function renderLines(lines) {
+  let rows = "";
+  for (const l of lines) {
+    if (l.k === "hunk" || l.k === "note") {
+      rows += `<tr class="${l.k}"><td colspan="4">${esc(l.s)}</td></tr>`;
+    } else {
+      rows += `<tr class="${l.k}"><td class="ln">${l.o || ""}</td><td class="ln">${l.n || ""}</td><td class="mark">${MARKERS[l.k]}</td><td class="code">${esc(l.s)}</td></tr>`;
+    }
+  }
+  return `<table class="diff-table"><colgroup><col class="ln"><col class="ln"><col class="mark"><col></colgroup>${rows}</table>`;
+}
+
+$("#diff-close").addEventListener("click", () => diffDialog.close());
+// The dialog's content covers all of it, so a click on the dialog itself is
+// on its backdrop.
+diffDialog.addEventListener("click", (e) => {
+  if (e.target === diffDialog) diffDialog.close();
+});
+diffDialog.addEventListener("close", () => {
+  diffLoad.abort();
+  diffBody.innerHTML = "";
+});
+
 grid.addEventListener("click", async (e) => {
+  const link = e.target.closest(".diff-link");
+  if (link) {
+    openDiff(link.closest(".panel").dataset.repo, link.dataset.hash);
+    return;
+  }
   const btn = e.target.closest(".copy");
   if (!btn) return;
   const ok = await copyText(btn.dataset.hash);

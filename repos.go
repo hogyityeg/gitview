@@ -222,7 +222,11 @@ func parseWorktrees(out []byte) []worktree {
 }
 
 func git(ctx context.Context, dir string, args ...string) ([]byte, error) {
+	return gitCmd(ctx, dir, args...).Output()
+}
+
+func gitCmd(ctx context.Context, dir string, args ...string) *exec.Cmd {
 	cmd := exec.CommandContext(ctx, "git", append([]string{"-C", dir, "--no-optional-locks"}, args...)...)
 	cmd.Env = append(os.Environ(), "GIT_TERMINAL_PROMPT=0", "LC_ALL=C")
-	return cmd.Output()
+	return cmd
 }

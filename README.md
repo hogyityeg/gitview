@@ -15,6 +15,8 @@ remote machine or across a polyrepo setup.
   behind the default branch (`origin/HEAD`, else `main` or `master`; needs git
   2.41+)
 - Click a commit's short hash to copy the full hash
+- Click the link icon after a commit's name to read its diff, inline, in a
+  nearly full-screen dialog (a merge is compared to its first parent)
 - One static binary with the web page embedded; it only reads from git
 
 ## Install
