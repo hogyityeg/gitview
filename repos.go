@@ -79,11 +79,14 @@ const (
 
 // readGraph lists the newest commits of every branch and tag in
 // topological order (children before their parents), like gitk --all.
+// Stashes and T3 Code's checkpoint refs are bookkeeping, not history, so
+// they are left out, both as commits and as ref labels.
 func readGraph(ctx context.Context, dir string, limit int) (*graph, error) {
 	ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
 	defer cancel()
 
-	out, err := git(ctx, dir, "log", "--exclude=refs/stash", "--all", "--topo-order",
+	out, err := git(ctx, dir, "log", "--decorate-refs-exclude=refs/t3/*",
+		"--exclude=refs/stash", "--exclude=refs/t3/*", "--all", "--topo-order",
 		"-n", strconv.Itoa(limit),
 		"--format=%H"+fieldSep+"%P"+fieldSep+"%D"+fieldSep+"%an"+fieldSep+"%at"+fieldSep+"%s"+recordSep)
 	if err != nil {

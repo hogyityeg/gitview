@@ -1,9 +1,12 @@
 package main
 
 import (
+	"context"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"slices"
+	"strings"
 	"testing"
 )
 
@@ -22,6 +25,41 @@ func TestParseLog(t *testing.T) {
 	}
 	if got[1].Refs != nil || len(got[1].Parents) != 0 || got[1].Subject != "first" || got[1].Time != 1690000000 {
 		t.Errorf("root commit = %+v", got[1])
+	}
+}
+
+func TestReadGraphHidesT3Refs(t *testing.T) {
+	dir := t.TempDir()
+	run := func(args ...string) string {
+		t.Helper()
+		cmd := exec.Command("git", args...)
+		cmd.Dir = dir
+		cmd.Env = append(os.Environ(),
+			"GIT_AUTHOR_NAME=a", "GIT_AUTHOR_EMAIL=a@example.com",
+			"GIT_COMMITTER_NAME=a", "GIT_COMMITTER_EMAIL=a@example.com")
+		out, err := cmd.CombinedOutput()
+		if err != nil {
+			t.Fatalf("git %v: %v\n%s", args, err, out)
+		}
+		return strings.TrimSpace(string(out))
+	}
+	run("init", "-q", "-b", "main")
+	run("commit", "-q", "--allow-empty", "-m", "real")
+	head := run("rev-parse", "HEAD")
+	tree := run("rev-parse", "HEAD^{tree}")
+	checkpoint := run("commit-tree", tree, "-p", head, "-m", "t3 checkpoint")
+	run("update-ref", "refs/t3/checkpoints/abc/ordinal/0", checkpoint)
+	run("update-ref", "refs/t3/checkpoints/abc/ordinal/1", head) // on a real commit
+
+	g, err := readGraph(context.Background(), dir, 100)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(g.Commits) != 1 || g.Commits[0].Subject != "real" {
+		t.Fatalf("commits = %+v, want only the real one", g.Commits)
+	}
+	if !slices.Equal(g.Commits[0].Refs, []string{"HEAD -> main"}) {
+		t.Errorf("refs = %v", g.Commits[0].Refs)
 	}
 }
 
