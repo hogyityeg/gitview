@@ -25,7 +25,8 @@ var skipDirs = map[string]bool{
 }
 
 // findRepos returns the repositories under root as slash-separated paths
-// relative to root ("." for root itself). It does not descend into repos.
+// relative to root ("." for root itself). It does not descend into repos, and
+// skips linked worktrees below root: their repo's graph already shows them.
 func findRepos(root string, maxDepth int) []string {
 	var repos []string
 	filepath.WalkDir(root, func(path string, d fs.DirEntry, err error) error {
@@ -37,7 +38,9 @@ func findRepos(root string, maxDepth int) []string {
 			return filepath.SkipDir
 		}
 		if _, err := os.Lstat(filepath.Join(path, ".git")); err == nil {
-			repos = append(repos, filepath.ToSlash(rel))
+			if rel == "." || !isLinkedWorktree(path) {
+				repos = append(repos, filepath.ToSlash(rel))
+			}
 			return filepath.SkipDir
 		}
 		if rel != "." && strings.Count(rel, string(filepath.Separator))+1 >= maxDepth {
@@ -47,6 +50,24 @@ func findRepos(root string, maxDepth int) []string {
 	})
 	sort.Strings(repos)
 	return repos
+}
+
+// isLinkedWorktree reports whether dir is a linked worktree: its .git is a
+// file pointing at a git dir with a commondir, unlike a submodule's.
+func isLinkedWorktree(dir string) bool {
+	b, err := os.ReadFile(filepath.Join(dir, ".git"))
+	if err != nil {
+		return false // a directory: a regular repo
+	}
+	gitdir, ok := strings.CutPrefix(strings.TrimSpace(string(b)), "gitdir: ")
+	if !ok {
+		return false
+	}
+	if !filepath.IsAbs(gitdir) {
+		gitdir = filepath.Join(dir, gitdir)
+	}
+	_, err = os.Stat(filepath.Join(gitdir, "commondir"))
+	return err == nil
 }
 
 type commit struct {

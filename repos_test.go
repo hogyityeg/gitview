@@ -162,8 +162,23 @@ func TestFindRepos(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
+	// A linked worktree of a is hidden; a submodule-style .git file is not.
+	must := func(err error) {
+		t.Helper()
+		if err != nil {
+			t.Fatal(err)
+		}
+	}
+	must(os.MkdirAll(filepath.Join(root, "a/.git/worktrees/wt"), 0o755))
+	must(os.WriteFile(filepath.Join(root, "a/.git/worktrees/wt/commondir"), []byte("../..\n"), 0o644))
+	must(os.MkdirAll(filepath.Join(root, "a-wt"), 0o755))
+	must(os.WriteFile(filepath.Join(root, "a-wt/.git"), []byte("gitdir: "+filepath.Join(root, "a/.git/worktrees/wt")+"\n"), 0o644))
+	must(os.MkdirAll(filepath.Join(root, "a/.git/modules/m"), 0o755))
+	must(os.MkdirAll(filepath.Join(root, "m"), 0o755))
+	must(os.WriteFile(filepath.Join(root, "m/.git"), []byte("gitdir: ../a/.git/modules/m\n"), 0o644))
+
 	got := findRepos(root, 3)
-	if want := []string{"a", "group/b"}; !slices.Equal(got, want) {
+	if want := []string{"a", "group/b", "m"}; !slices.Equal(got, want) {
 		t.Errorf("depth 3: got %v, want %v", got, want)
 	}
 	if got := findRepos(root, 5); !slices.Contains(got, "x/y/z/deep") {
