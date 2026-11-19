@@ -17,7 +17,10 @@ remote machine or across a polyrepo setup.
 - Click a commit's short hash to copy the full hash
 - Click the link icon after a commit's name to read its diff, inline, in a
   nearly full-screen dialog (a merge is compared to its first parent)
-- One static binary with the web page embedded; it only reads from git
+- Fetches the shown repositories' remotes every minute, so pushes made
+  elsewhere show up on their own
+- One static binary with the web page embedded; besides fetching, it only
+  reads from git
 
 ## Install
 
@@ -50,6 +53,7 @@ repository once it finds one, and it skips hidden folders and `node_modules`,
 | `-n`        | 400     | commits shown per repository               |
 | `-depth`    | 5       | how deep to look for repositories          |
 | `-interval` | 5s      | how often the browser refreshes            |
+| `-fetch`    | 1m      | how often to fetch shown repos (0: never)  |
 
 ### Choosing repositories
 

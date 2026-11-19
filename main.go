@@ -3,6 +3,7 @@
 package main
 
 import (
+	"context"
 	"embed"
 	"encoding/json"
 	"flag"
@@ -27,6 +28,7 @@ func main() {
 	limit := flag.Int("n", 400, "commits to show per repository")
 	depth := flag.Int("depth", 5, "how deep to look for repositories")
 	interval := flag.Duration("interval", 5*time.Second, "browser refresh interval")
+	fetchEvery := flag.Duration("fetch", time.Minute, "how often to fetch the shown repositories' remotes (0: never)")
 	flag.Usage = func() {
 		fmt.Fprintf(os.Stderr, "usage: gitview [flags] [folder]\n")
 		flag.PrintDefaults()
@@ -79,6 +81,10 @@ func main() {
 	if name := tailscaleName(); name != "" && *addr == "" {
 		_, port, _ := net.SplitHostPort(lns[0].Addr().String())
 		log.Printf("  http://%s:%s", name, port)
+	}
+
+	if *fetchEvery > 0 {
+		go srv.fetchLoop(context.Background(), *fetchEvery)
 	}
 
 	errc := make(chan error, len(lns))
