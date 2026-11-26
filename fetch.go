@@ -41,8 +41,10 @@ func newFetcher(reuse time.Duration) *fetcher {
 
 // fetch fetches the repository at dir (rel in logs) unless it was just
 // tried, and returns when it was last fetched successfully (zero if never)
-// and the last attempt's error. A failure is logged once until it changes or clears.
-func (f *fetcher) fetch(rel, dir string) (time.Time, string) {
+// and the last attempt's error. force (the fetch button) skips the reuse
+// window, only reusing a fetch that finished after the call started. A failure is logged once until it changes or clears.
+func (f *fetcher) fetch(rel, dir string, force bool) (time.Time, string) {
+	called := time.Now()
 	f.mu.Lock()
 	st := f.repos[dir]
 	if st == nil {
@@ -53,7 +55,7 @@ func (f *fetcher) fetch(rel, dir string) (time.Time, string) {
 
 	st.mu.Lock()
 	defer st.mu.Unlock()
-	if time.Since(st.tried) < f.reuse {
+	if st.tried.After(called) || !force && time.Since(st.tried) < f.reuse {
 		return st.ok, st.lastErr
 	}
 	f.sem <- struct{}{}

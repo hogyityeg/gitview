@@ -26,7 +26,7 @@ func main() {
 	addr := flag.String("addr", "", "listen address (default: 127.0.0.1 and the Tailscale IPv4, first free port from 7420)")
 	limit := flag.Int("n", 400, "commits to show per repository")
 	depth := flag.Int("depth", 5, "how deep to look for repositories")
-	interval := flag.Duration("interval", 5*time.Second, "how often to refresh the shown repositories, fetching their remotes")
+	interval := flag.Duration("interval", time.Minute, "how often to refresh the shown repositories, fetching their remotes")
 	noFetch := flag.Bool("no-fetch", false, "don't fetch remotes on refresh")
 	showVersion := flag.Bool("version", false, "print the version and exit")
 	flag.Usage = func() {

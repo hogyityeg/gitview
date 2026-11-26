@@ -9,12 +9,12 @@ const COLORS = ["#0969da", "#1a7f37", "#bf3989", "#9a6700", "#8250df", "#cf222e"
 const $ = (sel) => document.querySelector(sel);
 const grid = $("#grid");
 const statusEl = $("#status");
-const FRESH_MS = 60_000; // a fetch older than this shows red
+const GRACE_MS = 15_000; // a fetch older than the interval plus this shows red
 const pills = $("#pills");
 
 let repos = [];
 let rootName = "";
-let intervalMs = 5000;
+let intervalMs = 60000;
 const panels = new Map(); // repo path -> {el, etag, fetchedAt, fetchErr, local}
 let timer = 0;
 
@@ -236,9 +236,9 @@ function layoutGrid() {
   }
 }
 
-async function refreshPanel(path) {
+async function refreshPanel(path, force) {
   const p = panels.get(path);
-  const res = await fetch(`api/graph?repo=${encodeURIComponent(path)}`, {
+  const res = await fetch(`api/graph?repo=${encodeURIComponent(path)}${force ? "&fetch" : ""}`, {
     cache: "no-store",
     headers: p.etag ? { "If-None-Match": p.etag } : {},
   });
@@ -273,7 +273,8 @@ async function refreshPanel(path) {
 }
 
 // renderFetched shows how long ago the repo's remotes were fetched: green
-// while under a minute, red after, so a stuck or failing fetch stands out.
+// until the next refresh is overdue, red after, so a stuck or failing fetch
+// stands out.
 function renderFetched(p) {
   const el = p.el.querySelector(".fetched");
   if (p.local) {
@@ -283,18 +284,20 @@ function renderFetched(p) {
     return;
   }
   const ms = p.fetchedAt ? Date.now() - p.fetchedAt : Infinity;
-  el.className = `fetched ${ms < FRESH_MS ? "fresh" : "stale"}`;
+  el.className = `fetched ${ms < intervalMs + GRACE_MS ? "fresh" : "stale"}`;
   el.textContent = (p.fetchErr ? "fetch failed · " : "")
     + (p.fetchedAt ? `fetched ${ms < 60_000 ? `${Math.max(0, Math.floor(ms / 1000))}s` : age(ms / 1000)} ago` : "never fetched");
   el.title = (p.fetchedAt ? `last fetched ${new Date(p.fetchedAt).toLocaleString()}` : "not fetched yet")
     + (p.fetchErr ? `\n${p.fetchErr}` : "");
 }
 
-async function tick() {
+// tick refreshes every shown repo; force (the fetch button) makes the
+// server fetch even if it just did.
+async function tick(force = false) {
   clearTimeout(timer);
   if (!document.hidden) {
     try {
-      await Promise.all(enabledRepos().map(refreshPanel));
+      await Promise.all(enabledRepos().map((path) => refreshPanel(path, force)));
       statusEl.textContent = "";
     } catch (e) {
       statusEl.textContent = `offline: ${e.message}`;
@@ -302,6 +305,15 @@ async function tick() {
   }
   timer = setTimeout(tick, intervalMs);
 }
+
+const fetchBtn = $("#fetch-now");
+fetchBtn.addEventListener("click", async () => {
+  fetchBtn.disabled = true;
+  fetchBtn.textContent = "Fetching…";
+  await tick(true);
+  fetchBtn.disabled = false;
+  fetchBtn.textContent = "Fetch now";
+});
 
 // Ages keep counting between refreshes, so a refresh that hangs turns red.
 setInterval(() => {

@@ -3,7 +3,7 @@
 A live, read-only `gitk --all` in the browser, for one repository or many.
 
 Run `gitview` in a folder and it finds the git repositories under it and shows
-their commit graphs side by side, refreshing every few seconds. It's handy for
+their commit graphs side by side, refreshing every minute. It's handy for
 watching branches move while you (or your coding agents) work, especially on a
 remote machine or across a polyrepo setup.
 
@@ -19,7 +19,8 @@ remote machine or across a polyrepo setup.
   nearly full-screen dialog (a merge is compared to its first parent)
 - Fetches the shown repositories' remotes on every refresh, so pushes made
   elsewhere show up on their own; each repo's header says how long ago it was
-  fetched, green under a minute and red after (a fetch failing or hanging)
+  fetched, green until a refresh is overdue and red after (a fetch failing
+  or hanging); the Fetch now button fetches them all right away
 - Shows the running gitview's version in the header
 - One static binary with the web page embedded; besides fetching, it only
   reads from git
@@ -54,7 +55,7 @@ repository once it finds one, and it skips hidden folders and `node_modules`,
 | `-addr`     |         | listen on this address instead (see below)   |
 | `-n`        | 400     | commits shown per repository                 |
 | `-depth`    | 5       | how deep to look for repositories            |
-| `-interval` | 5s      | how often to refresh (and fetch) shown repos |
+| `-interval` | 1m      | how often to refresh (and fetch) shown repos |
 | `-no-fetch` | false   | don't fetch remotes on refresh               |
 | `-version`  | false   | print the version and exit                   |
 

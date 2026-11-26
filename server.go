@@ -88,7 +88,7 @@ func (s *server) handleGraph(w http.ResponseWriter, r *http.Request) {
 	// of that moment. The fetch result travels in headers, outside the ETag,
 	// so an unchanged graph still answers 304.
 	if s.fetcher != nil {
-		fetched, fetchErr := s.fetcher.fetch(rel, dir)
+		fetched, fetchErr := s.fetcher.fetch(rel, dir, r.URL.Query().Has("fetch"))
 		if !fetched.IsZero() {
 			w.Header().Set("X-Fetched-At", fetched.UTC().Format(time.RFC3339))
 		}

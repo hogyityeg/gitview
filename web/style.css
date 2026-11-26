@@ -34,6 +34,9 @@ header .spacer { flex: 1; }
 header .root { color: var(--fg); font-family: ui-monospace, monospace; font-size: 12px; }
 header .status { flex: none; font-size: 12px; }
 header .status.error { color: #cf222e; }
+header .fetch-now { flex: none; padding: 2px 10px; border: 1px solid var(--line); border-radius: 6px; background: var(--panel); color: var(--fg); font: inherit; font-size: 12px; cursor: pointer; }
+header .fetch-now:hover { border-color: #8c959f; }
+header .fetch-now:disabled { color: var(--muted); cursor: default; }
 header .version { flex: none; color: var(--muted); font-family: ui-monospace, monospace; font-size: 12px; }
 
 .layout { flex: 1; min-height: 0; display: flex; }
