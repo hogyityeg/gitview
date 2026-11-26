@@ -9,12 +9,13 @@ const COLORS = ["#0969da", "#1a7f37", "#bf3989", "#9a6700", "#8250df", "#cf222e"
 const $ = (sel) => document.querySelector(sel);
 const grid = $("#grid");
 const statusEl = $("#status");
+const FRESH_MS = 60_000; // a fetch older than this shows red
 const pills = $("#pills");
 
 let repos = [];
 let rootName = "";
 let intervalMs = 5000;
-const panels = new Map(); // repo path -> {el, etag}
+const panels = new Map(); // repo path -> {el, etag, fetchedAt, fetchErr, local}
 let timer = 0;
 
 // layout assigns every commit a lane (column) the way gitk does: a lane
@@ -227,8 +228,8 @@ function layoutGrid() {
       const el = document.createElement("section");
       el.className = "panel";
       el.dataset.repo = path;
-      el.innerHTML = `<div class="panel-head">${repoLabel(path)}<span class="head"></span><span class="error"></span></div><div class="panel-body"></div>`;
-      p = { el, etag: "" };
+      el.innerHTML = `<div class="panel-head">${repoLabel(path)}<span class="head"></span><span class="error"></span><span class="fetched"></span></div><div class="panel-body"></div>`;
+      p = { el, etag: "", fetchedAt: 0, fetchErr: "", local: false };
       panels.set(path, p);
     }
     grid.appendChild(p.el); // keeps panels in name order
@@ -242,6 +243,11 @@ async function refreshPanel(path) {
     headers: p.etag ? { "If-None-Match": p.etag } : {},
   });
   const errEl = p.el.querySelector(".error");
+  // The server fetches the remotes right before answering, also for a 304.
+  const at = res.headers.get("X-Fetched-At");
+  p.fetchedAt = at ? Date.parse(at) : 0;
+  p.fetchErr = decodeURIComponent(res.headers.get("X-Fetch-Error") || "");
+  renderFetched(p);
   if (res.status === 304) return;
   if (!res.ok) {
     errEl.textContent = (await res.text()).trim() || res.statusText;
@@ -253,6 +259,8 @@ async function refreshPanel(path) {
   if (sel && !sel.isCollapsed && p.el.contains(sel.anchorNode)) return;
   const g = await res.json();
   errEl.textContent = "";
+  p.local = !g.remotes.length;
+  renderFetched(p);
   const changed = p.etag !== "";
   p.etag = res.headers.get("ETag") || "";
   p.el.querySelector(".head").textContent = g.head ? `on ${g.head}` : "";
@@ -264,20 +272,41 @@ async function refreshPanel(path) {
   }
 }
 
+// renderFetched shows how long ago the repo's remotes were fetched: green
+// while under a minute, red after, so a stuck or failing fetch stands out.
+function renderFetched(p) {
+  const el = p.el.querySelector(".fetched");
+  if (p.local) {
+    el.className = "fetched";
+    el.textContent = "no remote";
+    el.title = "This repository has no remotes to fetch.";
+    return;
+  }
+  const ms = p.fetchedAt ? Date.now() - p.fetchedAt : Infinity;
+  el.className = `fetched ${ms < FRESH_MS ? "fresh" : "stale"}`;
+  el.textContent = (p.fetchErr ? "fetch failed · " : "")
+    + (p.fetchedAt ? `fetched ${ms < 60_000 ? `${Math.max(0, Math.floor(ms / 1000))}s` : age(ms / 1000)} ago` : "never fetched");
+  el.title = (p.fetchedAt ? `last fetched ${new Date(p.fetchedAt).toLocaleString()}` : "not fetched yet")
+    + (p.fetchErr ? `\n${p.fetchErr}` : "");
+}
+
 async function tick() {
   clearTimeout(timer);
   if (!document.hidden) {
     try {
       await Promise.all(enabledRepos().map(refreshPanel));
-      statusEl.className = "status";
-      statusEl.textContent = `updated ${new Date().toLocaleTimeString()}`;
+      statusEl.textContent = "";
     } catch (e) {
-      statusEl.className = "status error";
       statusEl.textContent = `offline: ${e.message}`;
     }
   }
   timer = setTimeout(tick, intervalMs);
 }
+
+// Ages keep counting between refreshes, so a refresh that hangs turns red.
+setInterval(() => {
+  if (!document.hidden) for (const p of panels.values()) if (p.etag) renderFetched(p);
+}, 1000);
 
 // repoLabel splits a repo path into its parent folder and name:
 // "services/api" shows as a small "services" with "api" under it. Repos right
@@ -426,7 +455,6 @@ pills.addEventListener("click", async (e) => {
   });
   if (!res.ok) {
     pill.setAttribute("aria-pressed", String(!enabled));
-    statusEl.className = "status error";
     statusEl.textContent = `could not save: ${(await res.text()).trim()}`;
     return;
   }
@@ -448,6 +476,7 @@ async function init() {
   rootName = data.name;
   document.title = `gitview · ${data.name}`;
   $("#root").textContent = data.root;
+  $("#version").textContent = `gitview ${data.version}`;
   renderPills();
   layoutGrid();
   tick();

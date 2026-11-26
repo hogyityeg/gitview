@@ -17,8 +17,10 @@ remote machine or across a polyrepo setup.
 - Click a commit's short hash to copy the full hash
 - Click the link icon after a commit's name to read its diff, inline, in a
   nearly full-screen dialog (a merge is compared to its first parent)
-- Fetches the shown repositories' remotes every minute, so pushes made
-  elsewhere show up on their own
+- Fetches the shown repositories' remotes on every refresh, so pushes made
+  elsewhere show up on their own; each repo's header says how long ago it was
+  fetched, green under a minute and red after (a fetch failing or hanging)
+- Shows the running gitview's version in the header
 - One static binary with the web page embedded; besides fetching, it only
   reads from git
 
@@ -47,13 +49,14 @@ Repositories are found up to `-depth` folders deep. It doesn't look inside a
 repository once it finds one, and it skips hidden folders and `node_modules`,
 `vendor`, `venv`, `__pycache__`, `dist`, `build` and `target`.
 
-| Flag        | Default | Meaning                                    |
-| ----------- | ------- | ------------------------------------------ |
-| `-addr`     |         | listen on this address instead (see below) |
-| `-n`        | 400     | commits shown per repository               |
-| `-depth`    | 5       | how deep to look for repositories          |
-| `-interval` | 5s      | how often the browser refreshes            |
-| `-fetch`    | 1m      | how often to fetch shown repos (0: never)  |
+| Flag        | Default | Meaning                                      |
+| ----------- | ------- | -------------------------------------------- |
+| `-addr`     |         | listen on this address instead (see below)   |
+| `-n`        | 400     | commits shown per repository                 |
+| `-depth`    | 5       | how deep to look for repositories            |
+| `-interval` | 5s      | how often to refresh (and fetch) shown repos |
+| `-no-fetch` | false   | don't fetch remotes on refresh               |
+| `-version`  | false   | print the version and exit                   |
 
 ### Choosing repositories
 
@@ -78,6 +81,18 @@ is no authentication, so don't expose it to a network you don't trust.
 ```sh
 go test ./...        # unit tests
 go build .           # the web page in web/ is embedded, so rebuild after changing it
+```
+
+## Releases
+
+Releases are semver git tags (`v1.0.0`, `v1.1.0`, …): a patch for fixes, a
+minor version for features. `go install …@latest` installs the latest tag, and
+`go build` in a checkout stamps the version from git, so a build of a tagged
+commit shows e.g. `v1.0.0`, a later commit `v1.0.1-dev+<hash>`, and
+uncommitted changes add `-dirty`.
+
+```sh
+git tag v1.1.0 && git push origin v1.1.0
 ```
 
 ## License

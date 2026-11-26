@@ -3,7 +3,6 @@
 package main
 
 import (
-	"context"
 	"embed"
 	"encoding/json"
 	"flag"
@@ -27,13 +26,18 @@ func main() {
 	addr := flag.String("addr", "", "listen address (default: 127.0.0.1 and the Tailscale IPv4, first free port from 7420)")
 	limit := flag.Int("n", 400, "commits to show per repository")
 	depth := flag.Int("depth", 5, "how deep to look for repositories")
-	interval := flag.Duration("interval", 5*time.Second, "browser refresh interval")
-	fetchEvery := flag.Duration("fetch", time.Minute, "how often to fetch the shown repositories' remotes (0: never)")
+	interval := flag.Duration("interval", 5*time.Second, "how often to refresh the shown repositories, fetching their remotes")
+	noFetch := flag.Bool("no-fetch", false, "don't fetch remotes on refresh")
+	showVersion := flag.Bool("version", false, "print the version and exit")
 	flag.Usage = func() {
 		fmt.Fprintf(os.Stderr, "usage: gitview [flags] [folder]\n")
 		flag.PrintDefaults()
 	}
 	flag.Parse()
+	if *showVersion {
+		fmt.Println(version())
+		return
+	}
 
 	root := "."
 	if flag.NArg() > 0 {
@@ -60,7 +64,11 @@ func main() {
 		limit:    *limit,
 		interval: *interval,
 		store:    store,
+		version:  version(),
 		static:   http.FileServerFS(web),
+	}
+	if !*noFetch {
+		srv.fetcher = newFetcher(*interval / 2)
 	}
 
 	var lns []net.Listener
@@ -74,17 +82,13 @@ func main() {
 		log.Fatal(err)
 	}
 
-	log.Printf("gitview: %s", root)
+	log.Printf("gitview %s: %s", srv.version, root)
 	for _, ln := range lns {
 		log.Printf("  http://%s", ln.Addr())
 	}
 	if name := tailscaleName(); name != "" && *addr == "" {
 		_, port, _ := net.SplitHostPort(lns[0].Addr().String())
 		log.Printf("  http://%s:%s", name, port)
-	}
-
-	if *fetchEvery > 0 {
-		go srv.fetchLoop(context.Background(), *fetchEvery)
 	}
 
 	errc := make(chan error, len(lns))

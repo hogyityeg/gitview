@@ -32,8 +32,9 @@ header {
 header .title { font-weight: 600; }
 header .spacer { flex: 1; }
 header .root { color: var(--fg); font-family: ui-monospace, monospace; font-size: 12px; }
-header .status { flex: none; color: var(--muted); font-size: 12px; }
+header .status { flex: none; font-size: 12px; }
 header .status.error { color: #cf222e; }
+header .version { flex: none; color: var(--muted); font-family: ui-monospace, monospace; font-size: 12px; }
 
 .layout { flex: 1; min-height: 0; display: flex; }
 
@@ -114,6 +115,9 @@ header .status.error { color: #cf222e; }
 .panel-head .name { font-size: 14px; font-weight: 600; }
 .panel-head .head { color: var(--fg); font-family: ui-monospace, monospace; font-size: 12px; overflow: hidden; text-overflow: ellipsis; }
 .panel-head .error { color: #cf222e; font-size: 12px; }
+.panel-head .fetched { flex: none; margin-left: auto; font-size: 12px; color: var(--muted); }
+.panel-head .fetched.fresh { color: #1a7f37; }
+.panel-head .fetched.stale { color: #cf222e; }
 .panel.changed .panel-head { animation: flash 1.5s ease-out; }
 @keyframes flash { from { background: #ddf4ff; } to { background: transparent; } }
 

@@ -7,6 +7,7 @@ import (
 	"errors"
 	"log"
 	"net/http"
+	"net/url"
 	"os"
 	"path/filepath"
 	"slices"
@@ -19,6 +20,8 @@ type server struct {
 	limit    int
 	interval time.Duration
 	store    *store
+	fetcher  *fetcher
+	version  string
 	static   http.Handler
 }
 
@@ -48,6 +51,7 @@ func (s *server) handleRepos(w http.ResponseWriter, r *http.Request) {
 		"root":       s.root,
 		"name":       filepath.Base(s.root),
 		"intervalMs": s.interval.Milliseconds(),
+		"version":    s.version,
 		"repos":      repos,
 	})
 }
@@ -74,10 +78,23 @@ func (s *server) handleToggle(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *server) handleGraph(w http.ResponseWriter, r *http.Request) {
-	dir, ok := s.repoDir(r.URL.Query().Get("repo"))
+	rel := r.URL.Query().Get("repo")
+	dir, ok := s.repoDir(rel)
 	if !ok {
 		http.Error(w, "unknown repo", http.StatusNotFound)
 		return
+	}
+	// Fetching right before reading makes each refresh show the remotes as
+	// of that moment. The fetch result travels in headers, outside the ETag,
+	// so an unchanged graph still answers 304.
+	if s.fetcher != nil {
+		fetched, fetchErr := s.fetcher.fetch(rel, dir)
+		if !fetched.IsZero() {
+			w.Header().Set("X-Fetched-At", fetched.UTC().Format(time.RFC3339))
+		}
+		if fetchErr != "" {
+			w.Header().Set("X-Fetch-Error", url.PathEscape(fetchErr))
+		}
 	}
 	g, err := readGraph(r.Context(), dir, s.limit)
 	if err != nil {
