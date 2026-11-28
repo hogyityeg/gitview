@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	"io"
+	"path"
 	"regexp"
 	"strconv"
 	"strings"
@@ -41,6 +42,22 @@ type fileDiff struct {
 	Added   int        `json:"added"`
 	Deleted int        `json:"deleted"`
 	Lines   []diffLine `json:"lines"`
+	// Lockfile marks a package manager's lockfile, which the UI collapses.
+	Lockfile bool `json:"lockfile,omitempty"`
+}
+
+// lockfiles are the Node.js and Bun lockfiles, by file name.
+var lockfiles = map[string]bool{
+	"package-lock.json":   true,
+	"npm-shrinkwrap.json": true,
+	"yarn.lock":           true,
+	"pnpm-lock.yaml":      true,
+	"bun.lock":            true,
+	"bun.lockb":           true,
+}
+
+func isLockfile(p string) bool {
+	return lockfiles[path.Base(p)]
 }
 
 // diffLine is one row of a unified diff: Kind is "hunk", "add", "del", "ctx"
@@ -154,6 +171,9 @@ func parseDiff(patch string) []fileDiff {
 			oldLine++
 			newLine++
 		}
+	}
+	for i := range files {
+		files[i].Lockfile = isLockfile(files[i].Path)
 	}
 	return files
 }

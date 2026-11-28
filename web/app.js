@@ -334,6 +334,7 @@ const diffTitle = $("#diff-title");
 const diffMeta = $("#diff-meta");
 const diffBody = $("#diff-body");
 let diffLoad = null; // AbortController of the diff being fetched
+let diffFiles = []; // files of the shown diff, for expanding collapsed ones
 
 async function openDiff(repo, hash) {
   diffLoad = new AbortController();
@@ -366,6 +367,7 @@ function renderDiff(repo, d) {
     `${d.files.length} ${d.files.length === 1 ? "file" : "files"} ${countMarks(count("added"), count("deleted"))}`,
     ...(d.merge ? ["merge, compared to its first parent"] : []),
   ].join(" · ");
+  diffFiles = d.files;
   diffBody.innerHTML = (d.body ? `<pre class="diff-message">${esc(d.body)}</pre>` : "")
     + (d.files.length ? d.files.map(renderFile).join("") : `<div class="diff-note">This commit changes no files.</div>`)
     + (d.truncated ? `<div class="diff-note">This diff is too large, so only the start of it is shown.</div>` : "");
@@ -373,17 +375,42 @@ function renderDiff(repo, d) {
 
 const countMarks = (added, deleted) => `<span class="diff-add">+${added}</span> <span class="diff-del">−${deleted}</span>`;
 
-function renderFile(f) {
+const CHEVRON = `<svg class="chevron" viewBox="0 0 16 16" width="12" height="12" aria-hidden="true"><path fill="currentColor" d="M6.22 3.22a.75.75 0 0 1 1.06 0l4.25 4.25a.75.75 0 0 1 0 1.06l-4.25 4.25a.751.751 0 0 1-1.042-.018.751.751 0 0 1-.018-1.042L9.94 8 6.22 4.28a.75.75 0 0 1 0-1.06Z"/></svg>`;
+
+// renderFile shows a file's changes. Lockfiles start collapsed, and their
+// lines are only rendered once expanded, since they can be huge.
+function renderFile(f, i) {
   const name = f.oldPath ? `${f.oldPath} → ${f.path}` : f.path;
   const empty = f.binary ? "Binary file."
     : f.status === "added" || f.status === "deleted" ? "Empty file."
     : "No content changes.";
-  return `<section class="diff-file">`
-    + `<div class="diff-file-head"><span class="diff-status ${f.status}">${f.status}</span>`
-    + `<span class="diff-path" title="${esc(name)}">${esc(name)}</span>${f.lines.length ? countMarks(f.added, f.deleted) : ""}</div>`
+  const head = `<span class="diff-status ${f.status}">${f.status}</span>`
+    + `<span class="diff-path" title="${esc(name)}">${esc(name)}</span>${f.lines.length ? countMarks(f.added, f.deleted) : ""}`;
+  if (f.lockfile && f.lines.length) {
+    return `<section class="diff-file collapsed" data-file="${i}">`
+      + `<button type="button" class="diff-file-head diff-toggle" aria-expanded="false" title="Lockfile, collapsed. Click to expand.">`
+      + `${CHEVRON}${head}<span class="diff-lockfile">lockfile</span></button></section>`;
+  }
+  return `<section class="diff-file"><div class="diff-file-head">${head}</div>`
     + (f.lines.length ? renderLines(f.lines) : `<div class="diff-note">${empty}</div>`)
     + `</section>`;
 }
+
+diffBody.addEventListener("click", (e) => {
+  const toggle = e.target.closest(".diff-toggle");
+  if (!toggle) return;
+  const file = toggle.closest(".diff-file");
+  const expand = toggle.getAttribute("aria-expanded") !== "true";
+  let table = file.querySelector(".diff-table");
+  if (expand && !table) {
+    file.insertAdjacentHTML("beforeend", renderLines(diffFiles[file.dataset.file].lines));
+    table = file.querySelector(".diff-table");
+  }
+  if (table) table.hidden = !expand;
+  file.classList.toggle("collapsed", !expand);
+  toggle.setAttribute("aria-expanded", String(expand));
+  toggle.title = expand ? "Lockfile. Click to collapse." : "Lockfile, collapsed. Click to expand.";
+});
 
 const MARKERS = { add: "+", del: "−", ctx: "" };
 
@@ -408,6 +435,7 @@ diffDialog.addEventListener("click", (e) => {
 diffDialog.addEventListener("close", () => {
   diffLoad.abort();
   diffBody.innerHTML = "";
+  diffFiles = [];
 });
 
 grid.addEventListener("click", async (e) => {

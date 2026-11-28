@@ -183,3 +183,22 @@ func TestHandleDiff(t *testing.T) {
 		}
 	}
 }
+
+func TestIsLockfile(t *testing.T) {
+	for p, want := range map[string]bool{
+		"package-lock.json":       true,
+		"apps/web/pnpm-lock.yaml": true,
+		"yarn.lock":               true,
+		"bun.lock":                true,
+		"packages/x/bun.lockb":    true,
+		"npm-shrinkwrap.json":     true,
+		"package.json":            false,
+		"docs/yarn.lock.md":       false,
+		"my-package-lock.json":    false,
+		"Cargo.lock":              false,
+	} {
+		if got := isLockfile(p); got != want {
+			t.Errorf("isLockfile(%q) = %v, want %v", p, got, want)
+		}
+	}
+}

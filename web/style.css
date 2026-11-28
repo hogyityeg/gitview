@@ -248,7 +248,13 @@ header .version { flex: none; color: var(--muted); font-family: ui-monospace, mo
   background: #f6f8fa;
   font-size: 12px;
 }
-.diff-file-head:last-child { border-bottom: 0; }
+.diff-file-head:last-child, .diff-file.collapsed .diff-file-head { border-bottom: 0; }
+.diff-toggle { width: 100%; border-width: 0 0 1px; color: inherit; font: inherit; font-size: 12px; text-align: left; cursor: pointer; }
+.diff-toggle:hover { background: #eaeef2; }
+.diff-file.collapsed .diff-toggle { border-radius: 6px; }
+.diff-toggle .chevron { flex: none; color: var(--muted); transition: transform 0.1s; }
+.diff-toggle[aria-expanded="true"] .chevron { transform: rotate(90deg); }
+.diff-lockfile { flex: none; margin-left: auto; color: var(--muted); font-size: 11px; }
 .diff-path { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-family: ui-monospace, monospace; font-weight: 600; }
 .diff-status { flex: none; padding: 0 6px; border: 1px solid var(--line); border-radius: 9px; background: #ffffff; color: var(--muted); font-size: 11px; line-height: 16px; }
 .diff-status.added { border-color: #4ac26b; color: #1a7f37; }
